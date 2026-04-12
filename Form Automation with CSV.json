@@ -1,0 +1,525 @@
+{
+  "name": "Form Automation with CSV",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1a8d1315-43a1-4541-b0e5-854225c3fe82",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2640,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/inputs.csv",
+        "options": {}
+      },
+      "id": "a058cb8a-7a72-4220-9322-a70cb25fbc60",
+      "name": "Read CSV File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "dcd6c673-5aa7-4f9c-9f38-84989ed3f4ab",
+      "name": "Extract from CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -2208,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    ...$json,\n    rowIndex: $input.itemIndex\n  }\n}"
+      },
+      "id": "f66f25ff-3001-412c-a1f3-1dab2fe6c7e7",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:5000/login",
+        "options": {}
+      },
+      "id": "19c5eff2-70a2-4a00-9ac2-1e9407e15b10",
+      "name": "Step 1: Get Login Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -1760,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// 1. HTML se captcha question nikalein\nconst html = $('Step 1: Get Login Page').item.json.data;\n\n// Regex to find \"X + Y\" or \"X - Y\" pattern\nconst match = html.match(/(\\d+)\\s*([\\+\\-])\\s*(\\d+)\\s*=\\s*\\?/);\n\nlet answer = 0;\nif (match) {\n    const num1 = parseInt(match[1]);\n    const operator = match[2];\n    const num2 = parseInt(match[3]);\n    \n    if (operator === '+') {\n        answer = num1 + num2;\n    } else if (operator === '-') {\n        answer = num1 - num2;\n    }\n}\n\n// 2. CSV data ko forward karein\nreturn {\n  json: {\n    ...$json,  // Yeh email, password, role, sab kuch pass karega\n    captcha_answer: answer.toString()\n  }\n}"
+      },
+      "id": "af7f16f9-e357-4a9e-9651-699672f5915b",
+      "name": "Step 2: Solve CAPTCHA Math",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/login",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "={{ $('Loop Over Items').item.json.email }}"
+            },
+            {
+              "name": "password",
+              "value": "={{ $('Loop Over Items').item.json.password }}"
+            },
+            {
+              "name": "captcha",
+              "value": "={{ $('Step 2: Solve CAPTCHA Math').item.json.captcha_answer }}"
+            },
+            {
+              "name": "username",
+              "value": "={{ $('Loop Over Items').item.json.full_name }}"
+            },
+            {
+              "name": "role",
+              "value": "student"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "def19ea8-f834-41a6-9b27-980d83adb33c",
+      "name": "Step 3: Submit Login + CAPTCHA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -1328,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const step3Item = $('Step 3: Submit Login + CAPTCHA').first();\nconst headers = step3Item.json.headers || {};\nconst setCookie = headers['set-cookie'] || headers['Set-Cookie'];\n\nlet cleanSession = '';\n\nif (Array.isArray(setCookie) && setCookie.length > 0) {\n    // Pehli cookie lein\n    const cookieString = setCookie[0];\n    // Sirf \"session=value\" part lein (semicolon se pehle)\n    cleanSession = cookieString.split(';')[0].trim();\n}\n\nreturn {\n    json: {\n        session: cleanSession\n    }\n}"
+      },
+      "id": "72f7e220-89e7-49a5-a23a-0ebeb4bf42ad",
+      "name": "Step 4: Extract Auth Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    full_name: $('Loop Over Items').item.json.full_name || '',\n    email: $('Loop Over Items').item.json.email || '',\n    password: $('Loop Over Items').item.json.password || '',\n    phone: $('Loop Over Items').item.json.phone || '',\n    website: $('Loop Over Items').item.json.website || '',\n    age: $('Loop Over Items').item.json.age?.toString() || '25',\n    birthdate: $('Loop Over Items').item.json.birthdate || '',\n    appointment: $('Loop Over Items').item.json.appointment || '',\n    alarm_time: $('Loop Over Items').item.json.alarm_time || '',\n    color: $('Loop Over Items').item.json.color || '#0d6efd',\n    satisfaction: $('Loop Over Items').item.json.satisfaction?.toString() || '5',\n    volume: $('Loop Over Items').item.json.volume?.toString() || '50',\n    country: $('Loop Over Items').item.json.country || '',\n    gender: $('Loop Over Items').item.json.gender || '',\n    education: $('Loop Over Items').item.json.education || '',\n    hobbies: $('Loop Over Items').item.json.hobbies || '',\n    skills: $('Loop Over Items').item.json.skills || '',\n    terms: $('Loop Over Items').item.json.terms || 'yes',\n    // Session token bhi chahiye\n    session: $json.session || $json.auth_token\n  }\n}"
+      },
+      "id": "7ef594e9-6bce-4df3-885b-ceda60da2a5e",
+      "name": "Step 5: Set All Form Field Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/all-inputs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "=Cookie",
+              "value": "={{ $('Step 4: Extract Auth Session').first().json.session }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"full_name\": \"{{ $json.full_name }}\",\n  \"email\": \"{{ $json.email }}\",\n  \"phone\": \"{{ $json.phone }}\",\n  \"website\": \"{{ $json.website }}\",\n  \"age\": {{ $json.age }},\n  \"birthdate\": \"{{ $json.birthdate }}\",\n  \"appointment\": \"{{ $json.appointment }}\",\n  \"alarm_time\": \"{{ $json.alarm_time }}\",\n  \"color\": \"{{ $json.color }}\",\n  \"satisfaction\": {{ $json.satisfaction }},\n  \"volume\": {{ $json.volume }},\n  \"country\": \"{{ $json.country }}\",\n  \"gender\": \"{{ $json.gender }}\",\n  \"education\": \"{{ $json.education }}\",\n  \"hobbies\": \"{{ $json.hobbies }}\",\n  \"skills\": \"{{ $json.skills }}\",\n  \"terms\": \"{{ $json.terms }}\"\n}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          }
+        }
+      },
+      "id": "4231471f-4388-401c-aeb6-7bf50163763b",
+      "name": "Step 6: Submit All Input Form",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -656,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// $json automatically refers to the current item's data in \"Each Item\" mode\nconst html = $json.data || '';\n\n// Check if response contains submissions page\nconst isSuccess = html.includes('Recent Submissions') && \n                  html.includes('All Inputs Form Submissions') &&\n                  html.includes('table');\n\n// Optional: Check if our email is in the submissions\nconst hasOurData = html.includes('john.doe+1@example.com');\n\nreturn {\n  json: {\n    data: html,\n    is_success: isSuccess || hasOurData,\n    submission_time: new Date().toISOString(),\n    debug: {\n      hasRecentSubmissions: html.includes('Recent Submissions'),\n      hasOurData: hasOurData,\n      htmlLength: html.length\n    }\n  }\n}"
+      },
+      "id": "7eed4131-afe5-4859-a89a-b34238e9f3f0",
+      "name": "Step 7: Check Submit Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.is_success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "13f2e9b6-2ee2-445a-9219-d03d063886b9",
+      "name": "Step 8: Success or Fail?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    status: 'SUCCESS',\n    message: 'Form submitted successfully',\n    data: $json,  // <-- Yahan change kiya hai\n    timestamp: new Date().toISOString()\n  }\n}"
+      },
+      "id": "83ba28dd-15f1-414b-a17c-f017f46e5b45",
+      "name": "Success Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  json: {\n    status: 'FAILURE',\n    message: 'Form submission failed',\n    data: $input.first().json,\n    timestamp: new Date().toISOString()\n  }\n}"
+      },
+      "id": "f8322b6b-5a58-4024-b51f-c4c7834623a2",
+      "name": "Failure Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1oqH7-KE10e2JlXwJoJu0kwCFBGp5jO16BedlknVoW6o",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oqH7-KE10e2JlXwJoJu0kwCFBGp5jO16BedlknVoW6o/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "final_status": "={{ $('Step 7: Check Submit Response').item.json.is_success ? 'SUCCESS' : 'FAILED' }}",
+            "final_message": "={{ $('Step 7: Check Submit Response').item.json.is_success ? 'Form submitted successfully!' : 'Form submission failed' }}",
+            "workflow_completed_at": "={{ new Date().toISOString() }}",
+            "submitted_email": "={{ $('Step 5: Set All Form Field Data').item.json.email }}",
+            "submitted_name": "={{ $('Step 5: Set All Form Field Data').item.json.full_name }}",
+            "response_code": "={{ $('Step 6: Submit All Input Form').item.json.statusCode || '302' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "final_status",
+              "displayName": "final_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "final_message",
+              "displayName": "final_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workflow_completed_at",
+              "displayName": "workflow_completed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "submitted_name",
+              "displayName": "submitted_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "submitted_email",
+              "displayName": "submitted_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "response_code",
+              "displayName": "response_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "b3164c5f-67c5-4406-8650-3b584b75f36d",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "MG79SIulVnKg4rHI",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read CSV File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read CSV File": {
+      "main": [
+        [
+          {
+            "node": "Extract from CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from CSV": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Step 1: Get Login Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 1: Get Login Page": {
+      "main": [
+        [
+          {
+            "node": "Step 2: Solve CAPTCHA Math",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 2: Solve CAPTCHA Math": {
+      "main": [
+        [
+          {
+            "node": "Step 3: Submit Login + CAPTCHA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 3: Submit Login + CAPTCHA": {
+      "main": [
+        [
+          {
+            "node": "Step 4: Extract Auth Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 4: Extract Auth Session": {
+      "main": [
+        [
+          {
+            "node": "Step 5: Set All Form Field Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 5: Set All Form Field Data": {
+      "main": [
+        [
+          {
+            "node": "Step 6: Submit All Input Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 6: Submit All Input Form": {
+      "main": [
+        [
+          {
+            "node": "Step 7: Check Submit Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 7: Check Submit Response": {
+      "main": [
+        [
+          {
+            "node": "Step 8: Success or Fail?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step 8: Success or Fail?": {
+      "main": [
+        [
+          {
+            "node": "Success Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Log": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e219d204-4788-4b9d-ac56-f6bd5c2b30e6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6208234db75419fc016827dba62fbaeb045041f37a2035455a4aebda4354b66e"
+  },
+  "id": "BAmClA8SrNVLDyos",
+  "tags": []
+}
