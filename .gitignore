@@ -1,0 +1,27 @@
+# Local environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+token.json
+secrets/
+secrets.*
+
+# Local n8n data, exports and logs
+.n8n/
+data/
+logs/
+*.log
+.DS_Store
+Thumbs.db
